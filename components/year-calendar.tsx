@@ -283,8 +283,8 @@ export function YearCalendar({
         const maxCols = Math.floor((usableWidth + gap) / (minCellSize + gap));
         const maxWeeks = Math.floor(maxCols / 7);
 
-        // Ensure at least 1 week, and cap at a reasonable maximum (e.g., 8 weeks)
-        const weeks = Math.max(1, Math.min(maxWeeks, 8));
+        // Ensure at least 1 week, and cap at 4 weeks maximum
+        const weeks = Math.max(1, Math.min(maxWeeks, 4));
         const cols = weeks * 7;
 
         // Calculate cell size based on the number of weeks
