@@ -250,6 +250,7 @@ export function YearCalendar({
     cols: 12,
     cell: 12,
   }));
+  const [isMobile, setIsMobile] = React.useState<boolean>(false);
 
   // Calculate actual cell width for month name visibility check
   const cellWidth = React.useMemo(() => {
@@ -267,19 +268,18 @@ export function YearCalendar({
 
   React.useEffect(() => {
     function onResize() {
+      const gap = 1;
+      const minCellSize = 70; // Minimum cell size in pixels (to fit 3 events: 16 label + 3*16 events + 2 padding = 66px, rounded to 70px)
+      const usableWidth = window.innerWidth - 2; // account for border
+      const usableHeight = window.innerHeight - 2; // account for border
+      const mobileBreakpoint = 768;
+      const mobile = usableWidth < mobileBreakpoint;
+      setIsMobile(mobile);
+
       if (alignWeekends) {
         // Dynamically calculate how many weeks can fit based on viewport width
-        const gap = 1;
-        const minCellSize = 70; // Minimum cell size in pixels (to fit 3 events: 16 label + 3*16 events + 2 padding = 66px, rounded to 70px)
-        const usableWidth = window.innerWidth - 2; // account for border
-        const usableHeight = window.innerHeight - 2; // account for border
-
         // Calculate maximum weeks that can fit with minimum cell size
         // Each week = 7 days, so columns = weeks * 7
-        // usableWidth = cols * cellSize + (cols - 1) * gap
-        // usableWidth = cols * minCellSize + (cols - 1) * gap
-        // usableWidth = cols * (minCellSize + gap) - gap
-        // cols = (usableWidth + gap) / (minCellSize + gap)
         const maxCols = Math.floor((usableWidth + gap) / (minCellSize + gap));
         const maxWeeks = Math.floor(maxCols / 7);
 
@@ -297,17 +297,13 @@ export function YearCalendar({
           minCellSize,
           Math.floor((usableHeight - (rows - 1) * gap) / rows)
         );
-        // Use the smaller of the two to ensure it fits both dimensions
-        const cellSize = Math.min(widthBasedCell, heightBasedCell);
+        // On desktop, use the smaller to ensure square cells; on mobile, allow flexibility
+        const cellSize = mobile
+          ? widthBasedCell
+          : Math.min(widthBasedCell, heightBasedCell);
         setGridDims({ cols, cell: cellSize });
       } else {
-        const minCellSize = 70; // Minimum cell size in pixels (same as alignWeekends - to fit 3 events)
-        const gap = 1;
-        const usableWidth = window.innerWidth - 2;
-        const usableHeight = window.innerHeight - 2;
-        const isMobile = usableWidth < 768; // Mobile breakpoint
-
-        if (isMobile) {
+        if (mobile) {
           // On mobile, prioritize fitting at least 7 days horizontally
           // Don't force square cells - allow taller cells if needed
           const minCols = 7; // At least 7 days (a week) must fit
@@ -324,7 +320,7 @@ export function YearCalendar({
 
           setGridDims({ cols, cell: cellSize });
         } else {
-          // On larger screens, use square grid logic
+          // On larger screens, ensure square cells
           const computed = computeSquareGridColumns(
             days.length,
             window.innerWidth,
@@ -356,7 +352,7 @@ export function YearCalendar({
                   )
                 : minCellSize;
 
-            // Use the smaller of the two to ensure it fits both dimensions
+            // Use the smaller of the two to ensure square cells
             const cellSize = Math.min(widthBasedCell, heightBasedCell);
 
             setGridDims({ cols: maxCols || 1, cell: cellSize });
@@ -488,7 +484,7 @@ export function YearCalendar({
           suppressHydrationWarning
           style={{
             gridTemplateColumns: `repeat(${gridDims.cols}, 1fr)`,
-            gridAutoRows: `${gridDims.cell}px`,
+            gridAutoRows: isMobile ? `${gridDims.cell}px` : "auto",
             gap: "1px",
           }}
         >
@@ -499,7 +495,10 @@ export function YearCalendar({
                 <div
                   key={`empty-${index}`}
                   data-day-cell="1"
-                  className="relative bg-muted/30 p-1 min-w-0 min-h-0 overflow-hidden"
+                  className={cn(
+                    "relative bg-muted/30 p-1 min-w-0 min-h-0 overflow-hidden",
+                    !isMobile && "aspect-square"
+                  )}
                 />
               );
             }
@@ -514,6 +513,7 @@ export function YearCalendar({
                 data-day-cell="1"
                 className={cn(
                   "relative bg-background p-1 min-w-0 min-h-0 overflow-hidden",
+                  !isMobile && "aspect-square",
                   isWeekend &&
                     'bg-white before:content-[""] before:absolute before:inset-0 before:bg-[rgba(0,0,0,0.02)] before:pointer-events-none',
                   isToday && "ring-1 ring-primary",
