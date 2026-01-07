@@ -64,6 +64,7 @@ export default function HomePage() {
   const startDateInputRef = useRef<HTMLInputElement | null>(null);
   const endDateInputRef = useRef<HTMLInputElement | null>(null);
   const preferencesLoaded = useRef<boolean>(false);
+  const [preferencesLoadedState, setPreferencesLoadedState] = useState<boolean>(false);
 
   const mergeCalendarColorsWithDefaults = (
     calendars: CalendarListItem[],
@@ -221,10 +222,12 @@ export default function HomePage() {
   // Load preferences from server when authenticated
   useEffect(() => {
     if (status === "authenticated" && !preferencesLoaded.current) {
-      preferencesLoaded.current = true;
       fetch("/api/preferences")
         .then((res) => res.json())
         .then((data) => {
+          // Only mark as loaded after successfully fetching preferences
+          preferencesLoaded.current = true;
+          setPreferencesLoadedState(true);
           if (data.selectedCalendarIds !== undefined) {
             setSelectedCalendarIds(data.selectedCalendarIds);
           }
@@ -247,11 +250,70 @@ export default function HomePage() {
         .catch((err) => {
           console.error("Failed to load preferences:", err);
           preferencesLoaded.current = false;
+          setPreferencesLoadedState(false);
         });
     } else if (status !== "authenticated") {
       preferencesLoaded.current = false;
+      setPreferencesLoadedState(false);
     }
   }, [status]);
+
+  // Handle calendar selection when both calendars and preferences are loaded
+  // This runs when preferences finish loading (if calendars are already loaded)
+  // or when calendars finish loading (if preferences are already loaded)
+  const processedCalendarSelectionRef = useRef<boolean>(false);
+  useEffect(() => {
+    if (
+      status === "authenticated" &&
+      preferencesLoadedState &&
+      calendars.length > 0 &&
+      !processedCalendarSelectionRef.current
+    ) {
+      processedCalendarSelectionRef.current = true;
+      const allIds = calendars.map((c) => c.id);
+      
+      // Check if we have a saved selection from preferences
+      // selectedCalendarIds from preferences will be set when preferences load
+      // We need to check the actual state at this point
+      const currentSelection = selectedCalendarIds;
+      
+      // If we have no saved selection (empty array), auto-select all for first-time user
+      if (currentSelection.length === 0) {
+        setSelectedCalendarIds(allIds);
+      } else {
+        // We have a saved selection - filter invalid and add new account calendars
+        const validSelection = currentSelection.filter((id) =>
+          allIds.includes(id)
+        );
+        // Check for new accounts and auto-add their calendars
+        const currentAccIds = new Set(
+          validSelection
+            .map((id) => extractAccountIdFromCalendarId(id))
+            .filter(Boolean)
+        );
+        const allAccIds = getAccountIdsFromCalendars(calendars);
+        const newAccIds = allAccIds.filter((id) => !currentAccIds.has(id));
+        if (newAccIds.length > 0) {
+          const toAdd = calendars
+            .filter((c) => {
+              const accId = extractAccountIdFromCalendarId(c.id);
+              return accId && newAccIds.includes(accId);
+            })
+            .map((c) => c.id);
+          const newSelection = Array.from(
+            new Set([...validSelection, ...toAdd])
+          );
+          setSelectedCalendarIds(newSelection);
+        } else if (validSelection.length !== currentSelection.length) {
+          // Just filter invalid calendars
+          setSelectedCalendarIds(validSelection);
+        }
+      }
+    }
+    if (status !== "authenticated") {
+      processedCalendarSelectionRef.current = false;
+    }
+  }, [status, preferencesLoadedState, calendars, selectedCalendarIds]);
 
   const visibleEvents = useMemo(() => {
     if (showHidden) return events;
@@ -295,6 +357,7 @@ export default function HomePage() {
     fetch(`/api/calendars`, { cache: "no-store" })
       .then((res) => res.json())
       .then((data) => {
+        // Always update calendars list
         const list = (data.calendars || []) as CalendarListItem[];
         const accs = (data.accounts || []) as LinkedAccount[];
         setCalendars(list);
@@ -340,20 +403,10 @@ export default function HomePage() {
             history.replaceState({}, "", url.toString());
           }
         } else {
-          // Normal load: filter invalid calendars and add new account calendars
-          newSelection = handleNormalLoadCalendarSelection(
-            list,
-            selectedCalendarIds,
-            allIds,
-            preferencesLoaded.current
-          );
-          // Only update if selection actually changed
-          if (
-            newSelection.length !== selectedCalendarIds.length ||
-            !newSelection.every((id) => selectedCalendarIds.includes(id))
-          ) {
-            setSelectedCalendarIds(newSelection);
-          }
+          // Normal load: don't modify calendar selection here
+          // Calendar selection is handled by the separate useEffect that runs
+          // after both preferences and calendars are loaded
+          // This prevents race conditions where calendars load before preferences
         }
 
         // Update calendar colors (merge with existing, add defaults for new calendars)
@@ -367,7 +420,7 @@ export default function HomePage() {
         setSelectedCalendarIds([]);
         setCalendarColors({});
       });
-  }, [status]);
+  }, [status, preferencesLoadedState]);
 
   useEffect(() => {
     if (!createOpen) {

@@ -616,7 +616,7 @@ export function YearCalendar({
               }
             }
             const bars: Array<React.ReactElement> = [];
-            const labelOffset = 16;
+            const labelOffset = 20; // Increased from 16 to add more margin above events
             const laneHeight = 16;
             const maxLanes = Math.max(
               1,
